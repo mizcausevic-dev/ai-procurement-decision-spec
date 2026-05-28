@@ -353,7 +353,7 @@
         "vendor": {
           "description": "Vault provider. Vendor-neutral enum; 'custom' covers self-hosted vaults and 'other' covers providers not yet listed. Adding a name here is descriptive only; the spec does not endorse any provider.",
           "type": "string",
-          "enum": ["skyflow", "piiano", "nightfall", "private-ai", "very-good-security", "evervault", "custom", "other"]
+          "enum": ["skyyflow", "piiano", "nightfall", "private-ai", "very-good-security", "evervault", "custom", "other"]
         },
         "vault_id": {
           "description": "Provider-issued vault identifier. Format is vendor-specific.",

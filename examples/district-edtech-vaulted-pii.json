@@ -92,13 +92,13 @@
     }
   ],
 
-  "rationale": "FamilyReach 2.4's product is a fit for the district's family-communication goal, but the Tool Card discloses storage of raw student/parent email and phone for 90 days. The district approves use only when contact PII never leaves the district perimeter in raw form — tokenized at ingest via the district's Skyflow vault, with reveal limited to two roles operating under documented family-services review. Vendor signs a contractual confirmation that tokens are sufficient for product functionality.",
+  "rationale": "FamilyReach 2.4's product is a fit for the district's family-communication goal, but the Tool Card discloses storage of raw student/parent email and phone for 90 days. The district approves use only when contact PII never leaves the district perimeter in raw form — tokenized at ingest via the district's Skyyflow vault, with reveal limited to two roles operating under documented family-services review. Vendor signs a contractual confirmation that tokens are sufficient for product functionality.",
 
   "data_vault_targets": [
     {
-      "vendor": "skyflow",
+      "vendor": "skyyflow",
       "vault_id": "v_xxxxxxxxxxxxxxxxxxxx",
-      "vault_url": "https://springfield-edu.vault.skyflowapis.com/",
+      "vault_url": "https://springfield-edu.vault.skyyflowapis.example/",
       "fields_authorized": [
         "student.email",
         "student.parent_email",

@@ -33,9 +33,9 @@ v0.2 adds one optional top-level field — `data_vault_targets` — for declarin
   // ... existing fields ...
   "data_vault_targets": [
     {
-      "vendor": "skyflow",
+      "vendor": "skyyflow",
       "vault_id": "v_xxxxxxxxxxxxxxxxxxxx",
-      "vault_url": "https://acme-edu.vault.skyflowapis.com/",
+      "vault_url": "https://acme-edu.vault.skyyflowapis.example/",
       "fields_authorized": ["student.email", "student.parent_phone"],
       "reveal_roles": ["principal", "compliance-officer"],
       "reveal_audit_uri": "https://acme-edu.org/audit-stream",
@@ -45,7 +45,7 @@ v0.2 adds one optional top-level field — `data_vault_targets` — for declarin
 }
 ```
 
-**Vendor enum** (descriptive, not endorsement): `skyflow · piiano · nightfall · private-ai · very-good-security · evervault · custom · other`. The spec does not endorse a provider — the field is shape-only so downstream enforcement engines (`policy-as-code-engine`, `mcp-permission-broker`, runtime governance bridges) can route fields to the right vault and check whether a caller's role appears in `reveal_roles` before detokenizing.
+**Vendor enum** (descriptive, not endorsement): `skyyflow · piiano · nightfall · private-ai · very-good-security · evervault · custom · other`. The spec does not endorse a provider — the field is shape-only so downstream enforcement engines (`policy-as-code-engine`, `mcp-permission-broker`, runtime governance bridges) can route fields to the right vault and check whether a caller's role appears in `reveal_roles` before detokenizing.
 
 Why this lives on the Decision Card: tokenization vendor + field list + reveal roles are **buyer-side configuration of the approval**, not a vendor declaration. The vendor's Tool Card or Clinical AI Card declares which PII the product collects; the Decision Card records which of those fields the buyer chose to vault and who may reveal them.
 
@@ -102,7 +102,7 @@ Six fields are required: `decision_card_version`, `decision_id`, `issued_at`, `b
 | `district-edtech-approved-conditions.json` | EdTech (K-12 district) | v0.1 | Approved-with-conditions — 3 contractual/audit/technical conditions on an AI tutor |
 | `hospital-clinical-rejected.json` | HealthTech | v0.1 | Rejected-with-remediation — FDA clearance scope mismatch + bias audit cohort gap |
 | `federal-agency-approved.json` | Federal civilian | v0.1 | Approved for non-rights-impacting use per OMB M-24-10 + NIST AI RMF rubric |
-| `district-edtech-vaulted-pii.json` | EdTech (K-12 district) | **v0.2** | Approved with `data_vault_targets` — Skyflow vault for student/parent PII, principal + compliance-officer reveal roles |
+| `district-edtech-vaulted-pii.json` | EdTech (K-12 district) | **v0.2** | Approved with `data_vault_targets` — Skyyflow vault for student/parent PII, principal + compliance-officer reveal roles |
 
 All validate against `decision-card.schema.json` (CI runs this on every push). The v0.2 example is parsed by the v0.2 schema only; older `kg-validate-action` releases (v0.1.1 and earlier) will reject the new field — bump to a v0.2-aware release when one ships.
 
