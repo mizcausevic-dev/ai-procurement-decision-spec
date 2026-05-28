@@ -1,0 +1,207 @@
+{
+  "decision_card_version": "0.3",
+  "decision_id": "SPRINGFIELD-DEC-2026-021",
+  "issued_at": "2026-08-12T16:00:00Z",
+
+  "buyer": {
+    "name": "Springfield Unified School District",
+    "type": "school-district",
+    "category": "edtech-district",
+    "jurisdiction": "US-CA",
+    "url": "https://springfield.edu/",
+    "contact": "procurement@springfield.edu",
+    "id": "https://springfield.edu/#org"
+  },
+
+  "decision_maker": {
+    "role": "Director of Educational Technology",
+    "name": "Dr. Jane Doe",
+    "department": "Office of Technology",
+    "authority": "Board Resolution 2026-08"
+  },
+
+  "decision": {
+    "status": "approved-with-conditions",
+    "effective_from": "2026-09-01",
+    "effective_until": "2027-08-31",
+    "scope": "K-12 AI reading-tutor; approved only when (a) student contact PII flows through the district vault and (b) transcripts/contact PII are purged on the declared retention schedule with signed deletion receipts."
+  },
+
+  "subject": {
+    "vendor_name": "Tutori Inc.",
+    "product_name": "Tutori Reading 3.1",
+    "vendor_id": "https://tutori.example/.well-known/aeo.json",
+    "documents_reviewed": [
+      {
+        "type": "tutor-card",
+        "url": "https://tutori.example/.well-known/tutor-cards/index.json",
+        "fetched_at": "2026-08-04T14:00:00Z",
+        "content_hash": "sha256:f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+        "version": "3.1.0"
+      },
+      {
+        "type": "student-ai-disclosure",
+        "url": "https://tutori.example/.well-known/student-ai-disclosure.json",
+        "fetched_at": "2026-08-04T14:00:00Z",
+        "content_hash": "sha256:e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2"
+      },
+      {
+        "type": "ai-evidence",
+        "url": "https://tutori.example/.well-known/ai-evidence/reading-3.1.json",
+        "fetched_at": "2026-08-04T14:00:00Z",
+        "content_hash": "sha256:d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3"
+      }
+    ]
+  },
+
+  "criteria": {
+    "policy_uris": [
+      "https://springfield.edu/.well-known/aup.json",
+      "https://springfield.edu/policies/student-pii-vaulting-2026.pdf",
+      "https://springfield.edu/policies/student-data-retention-2026.pdf"
+    ],
+    "rubric": [
+      {
+        "id": "ferpa-compliance",
+        "description": "Vendor processes student records in a FERPA-compliant manner.",
+        "weight": 1.0,
+        "result": "pass"
+      },
+      {
+        "id": "coppa-compliance",
+        "description": "Vendor obtains verifiable parental consent for users under 13.",
+        "weight": 1.0,
+        "result": "pass"
+      },
+      {
+        "id": "pii-tokenization",
+        "description": "Student contact PII is tokenized before persistence in vendor systems.",
+        "weight": 1.0,
+        "result": "pass-with-condition",
+        "notes": "Approved subject to data_vault_targets[0] — vendor never sees raw email or phone."
+      },
+      {
+        "id": "retention-schedule",
+        "description": "Vendor honors district-declared retention schedule with signed deletion proofs.",
+        "weight": 1.0,
+        "result": "pass-with-condition",
+        "notes": "Approved subject to retention_envelope and the deletion-proof contract in C-3."
+      }
+    ]
+  },
+
+  "conditions": [
+    {
+      "id": "C-1",
+      "description": "Student contact PII (email, parent_email, parent_phone) MUST be tokenized through the district's vault before flowing to Tutori. Vendor receives tokens only.",
+      "enforcement": "technical",
+      "violation_response": "Approval suspended pending review; district disables the tenant.",
+      "verification_uri": "https://springfield.edu/audit/v_vault_tokens"
+    },
+    {
+      "id": "C-2",
+      "description": "Detokenization may only be performed by Springfield USD principals and compliance-officers acting on documented family-services or academic-intervention requests. All reveal events are appended to the district audit stream.",
+      "enforcement": "technical",
+      "verification_uri": "https://springfield.edu/audit-stream"
+    },
+    {
+      "id": "C-3",
+      "description": "Vendor implements the declared retention_envelope. On TTL expiry, the declared redact_on_expiry action fires AND an ed25519-signed deletion receipt is posted to deletion_proof_uri within 24 hours, verifiable against the district's published retention-signer key. Receipts missing or unverifiable for two consecutive cycles trigger Condition C-1's violation response.",
+      "enforcement": "technical",
+      "verification_uri": "https://springfield.edu/.well-known/retention/proof",
+      "violation_response": "Tenant disabled; district issues a retention-failure notice and opens an Incident Card."
+    }
+  ],
+
+  "rationale": "Tutori Reading 3.1 is a strong fit for the district's K-3 literacy initiative. Tutori's Tool Card discloses storage of student contact PII and AI-tutor transcripts; the district's Board Policy 5125 sets distinct retention horizons for those two classes of record (90 days for contact, one school year for transcripts). The district approves use only when (a) contact PII is vaulted and reveal is limited to two named roles (C-1, C-2), and (b) vendor honors the per-field retention_envelope with ed25519-signed deletion receipts posted to the district's retention endpoint (C-3). Receipts are appended to the same audit-stream the district uses for reveal events, giving the auditor one canonical record of both access and deletion.",
+
+  "data_vault_targets": [
+    {
+      "vendor": "skyyflow",
+      "vault_id": "v_yyyyyyyyyyyyyyyyyyyy",
+      "vault_url": "https://springfield-edu.vault.skyyflowapis.example/",
+      "fields_authorized": [
+        "student.email",
+        "student.parent_email",
+        "student.parent_phone"
+      ],
+      "reveal_roles": ["principal", "compliance-officer"],
+      "reveal_audit_uri": "https://springfield.edu/audit-stream",
+      "expires_at": "2027-08-31T23:59:59Z",
+      "notes": "US-East residency. Key rotation: 90-day."
+    }
+  ],
+
+  "retention_envelope": [
+    {
+      "field": "student.email",
+      "ttl": "P90D",
+      "redact_on_expiry": "tokenize",
+      "deletion_proof_uri": "https://springfield.edu/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://springfield.edu/.well-known/keys/retention-signer.json",
+      "exemptions": [
+        {
+          "trigger": "active-legal-hold",
+          "role": "legal-hold-officer",
+          "max_extension": "P365D",
+          "audit_uri": "https://springfield.edu/audit-stream",
+          "notes": "Hold paused during active CDE complaint or e-discovery."
+        }
+      ],
+      "notes": "On expiry the value is tokenized via the vault, not purged, so vault-resident analytics keep working without ever surfacing the raw value."
+    },
+    {
+      "field": "student.parent_email",
+      "ttl": "P90D",
+      "redact_on_expiry": "purge",
+      "deletion_proof_uri": "https://springfield.edu/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://springfield.edu/.well-known/keys/retention-signer.json"
+    },
+    {
+      "field": "student.parent_phone",
+      "ttl": "P30D",
+      "redact_on_expiry": "purge",
+      "deletion_proof_uri": "https://springfield.edu/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://springfield.edu/.well-known/keys/retention-signer.json"
+    },
+    {
+      "field": "session.transcript",
+      "ttl": "P1Y",
+      "redact_on_expiry": "hash",
+      "deletion_proof_uri": "https://springfield.edu/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://springfield.edu/.well-known/keys/retention-signer.json",
+      "exemptions": [
+        {
+          "trigger": "active-investigation",
+          "role": "compliance-officer",
+          "max_extension": "P180D",
+          "audit_uri": "https://springfield.edu/audit-stream",
+          "notes": "Title IX or Section 504 investigations may extend transcript retention up to six months past TTL."
+        }
+      ],
+      "notes": "Aligns with Board Policy 5125 — one school year for AI-tutor transcripts. Hashed (not purged) so cohort-level evidence remains available without identifiers."
+    }
+  ],
+
+  "history": [
+    {
+      "event": "review_started",
+      "at": "2026-07-22T13:00:00Z",
+      "actor": "Director of Educational Technology"
+    },
+    {
+      "event": "documents_collected",
+      "at": "2026-08-04T14:00:00Z"
+    },
+    {
+      "event": "approved-with-conditions",
+      "at": "2026-08-12T16:00:00Z",
+      "note": "Technical vaulting + signed-deletion retention conditions added per Board Policy 5125."
+    }
+  ],
+
+  "publication": {
+    "publication_uri": "https://springfield.edu/.well-known/decisions/SPRINGFIELD-DEC-2026-021.json",
+    "is_public": true
+  }
+}

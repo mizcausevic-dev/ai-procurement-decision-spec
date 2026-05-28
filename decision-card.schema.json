@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mizcausevic-dev/ai-procurement-decision-spec/blob/main/decision-card.schema.json",
   "title": "AI Procurement Decision Card",
-  "description": "A buyer-side artifact recording the outcome of a procurement review of one or more AI vendor declaration documents. Served at /.well-known/decisions/{decision_id}.json (per-decision) or referenced in /.well-known/decisions/index.json. v0.2 draft (v0.1 documents remain valid).",
+  "description": "A buyer-side artifact recording the outcome of a procurement review of one or more AI vendor declaration documents. Served at /.well-known/decisions/{decision_id}.json (per-decision) or referenced in /.well-known/decisions/index.json. v0.3 draft (v0.1 and v0.2 documents remain valid). v0.2 added data_vault_targets; v0.3 adds retention_envelope for per-field TTL + signed deletion proofs.",
   "type": "object",
   "required": [
     "decision_card_version",
@@ -16,9 +16,9 @@
   "additionalProperties": false,
   "properties": {
     "decision_card_version": {
-      "description": "Spec version. '0.1' or '0.2'. v0.2 adds the optional 'data_vault_targets' field for declaring vendor-neutral PII tokenization vault targets the decision authorizes at runtime; v0.1 documents remain valid.",
+      "description": "Spec version. '0.1', '0.2', or '0.3'. v0.2 adds the optional 'data_vault_targets' field for declaring vendor-neutral PII tokenization vault targets the decision authorizes at runtime. v0.3 adds the optional 'retention_envelope' field for declaring per-field TTLs and signed deletion-proof endpoints. Earlier versions remain valid against this schema.",
       "type": "string",
-      "enum": ["0.1", "0.2"]
+      "enum": ["0.1", "0.2", "0.3"]
     },
     "decision_id": {
       "description": "Stable, buyer-issued identifier. Conventionally DEC-<year>-<seq> but any string unique to the buyer is valid.",
@@ -62,6 +62,11 @@
       "description": "v0.2. Optional. Vendor-neutral declaration of PII tokenization vault targets this decision authorizes at runtime — used by the policy-as-code engine and downstream enforcement points (MCP permission broker, governance bridges, RAG indexers) to route specific PII fields through a vault before persistence and to permit detokenization only for declared reveal_roles. Vendor-neutral by design: the 'vendor' enum names known providers but the field is shape-only; pricing, contracts, and provider selection live outside this spec.",
       "type": "array",
       "items": { "$ref": "#/$defs/DataVaultTarget" }
+    },
+    "retention_envelope": {
+      "description": "v0.3. Optional. Per-field retention rules the buyer attaches to the decision: how long each PII field may be stored, what redaction action fires at expiry, where the signed deletion receipt is posted, and which roles may hold a field past its TTL (legal-hold exemptions). Designed as the natural pairing with data_vault_targets — vault targets say WHO can read, retention envelope says HOW LONG the underlying data lives and HOW deletion is proven. Vendor-neutral and additive: enforcement implementations (data-contract-registry, audit-stream consumers, vault tools) decide how to act on the rules; this spec only declares the contract.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/RetentionRule" }
     }
   },
   "$defs": {
@@ -387,6 +392,84 @@
         },
         "notes": {
           "description": "Free-form notes — e.g. residency requirements, key-rotation expectations, contractual carve-outs.",
+          "type": "string"
+        }
+      }
+    },
+    "RetentionRule": {
+      "description": "v0.3. One retention rule attached to a field (or a JSONPath-style selector). Buyer-declared: this decision authorizes the named field for the specified TTL, then the named redaction action fires, and a signed receipt is posted to deletion_proof_uri so an auditor can verify deletion happened.",
+      "type": "object",
+      "required": ["field", "ttl", "redact_on_expiry"],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "description": "Field name or JSONPath-style selector this rule applies to. Same conventions as DataVaultTarget.fields_authorized — simple names ('email') or selectors ('$.contact.email'). Use '*' to apply the rule to every PII field declared in the matching data_vault_targets entry.",
+          "type": "string",
+          "minLength": 1
+        },
+        "ttl": {
+          "description": "Time-to-live. ISO 8601 duration ('P30D', 'P7Y', 'P12M') or an absolute RFC 3339 timestamp at which retention expires. Durations are computed from the value's first persistence, not from the decision's issued_at.",
+          "type": "string",
+          "minLength": 1
+        },
+        "redact_on_expiry": {
+          "description": "Action that fires when the TTL elapses. 'purge' = remove the value entirely. 'tokenize' = replace with a vault token but keep the row (requires a matching data_vault_targets entry). 'hash' = replace with a one-way SHA-256 hash so cohort analysis is possible without identifiers. 'replace-with-null' = zero the field but keep the schema slot.",
+          "type": "string",
+          "enum": ["purge", "tokenize", "hash", "replace-with-null"]
+        },
+        "deletion_proof_uri": {
+          "description": "URL where the signed deletion receipt is posted after redact_on_expiry fires. Receipts follow the audit-stream event shape (canonical-JSON SHA-256, ed25519 signed) and can be appended to an audit-stream-py instance for tamper-evident long-term storage.",
+          "type": "string",
+          "format": "uri"
+        },
+        "deletion_signer_key_uri": {
+          "description": "Public-key URL for verifying deletion receipts. The same key may be used across many retention rules. Convention: a JWK Set served at /.well-known/keys/retention-signer.json.",
+          "type": "string",
+          "format": "uri"
+        },
+        "exemptions": {
+          "description": "Roles or operational triggers that may hold the field past its TTL — typically legal-hold, active-litigation, or regulator-request. Each exemption pauses the TTL clock; the exemption itself is auditable via the audit-stream.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/RetentionExemption" }
+        },
+        "notes": {
+          "description": "Free-form notes — e.g. 'extended to P12M while NCES study CDC-2026-117 is open', 'aligned with district board policy 5125'.",
+          "type": "string"
+        }
+      }
+    },
+    "RetentionExemption": {
+      "description": "v0.3. One exemption that pauses TTL accrual for a retention rule. Declarative only — actual enforcement (matching incoming role claims, recording the hold start, releasing on hold lift) lives in the consumer.",
+      "type": "object",
+      "required": ["trigger"],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": {
+          "description": "Why the field is held. 'active-legal-hold' covers active litigation or e-discovery. 'regulator-request' covers a supervisory authority's preservation order. 'active-investigation' covers internal investigations. 'consent-renewal-pending' covers a renewal still in flight. 'other' is a catch-all — buyer notes the specific basis in notes.",
+          "type": "string",
+          "enum": [
+            "active-legal-hold",
+            "regulator-request",
+            "active-investigation",
+            "consent-renewal-pending",
+            "other"
+          ]
+        },
+        "role": {
+          "description": "Buyer-declared role authorized to invoke this exemption (e.g. 'legal-hold-officer', 'compliance-officer'). Matches the same role vocabulary as DataVaultTarget.reveal_roles. Empty = anyone with appropriate authority on the underlying system.",
+          "type": "string"
+        },
+        "max_extension": {
+          "description": "Optional cap on how long the exemption may pause TTL accrual. ISO 8601 duration ('P30D') or absolute RFC 3339 timestamp. When set and the cap elapses, the rule's redact_on_expiry fires regardless of the hold.",
+          "type": "string"
+        },
+        "audit_uri": {
+          "description": "URL where invocation/release events for this exemption should be posted (typically the same audit-stream as deletion_proof_uri).",
+          "type": "string",
+          "format": "uri"
+        },
+        "notes": {
+          "description": "Free-form notes — e.g. case number, regulator reference, or specific carve-out language.",
           "type": "string"
         }
       }

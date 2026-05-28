@@ -18,10 +18,10 @@ The Decision Card fixes that. A buyer publishes a Decision Card at a well-known 
 Documents conforming to this spec carry the top-level field:
 
 ```json
-{ "decision_card_version": "0.2", ... }
+{ "decision_card_version": "0.3", ... }
 ```
 
-This matches the Suite's pattern (`aeo_version`, `clinical_ai_card_version`, etc.) for auto-detection across MCP tools, the GitHub Action, and the hosted validator. Values `"0.1"` and `"0.2"` are both valid — see the [v0.2 section](#v02-data-vault-targets) below.
+This matches the Suite's pattern (`aeo_version`, `clinical_ai_card_version`, etc.) for auto-detection across MCP tools, the GitHub Action, and the hosted validator. Values `"0.1"`, `"0.2"`, and `"0.3"` are all valid — see the [v0.2 section](#v02-data-vault-targets) and [v0.3 section](#v03-retention-envelope) below.
 
 ### v0.2: data vault targets
 
@@ -48,6 +48,59 @@ v0.2 adds one optional top-level field — `data_vault_targets` — for declarin
 **Vendor enum** (descriptive, not endorsement): `skyyflow · piiano · nightfall · private-ai · very-good-security · evervault · custom · other`. The spec does not endorse a provider — the field is shape-only so downstream enforcement engines (`policy-as-code-engine`, `mcp-permission-broker`, runtime governance bridges) can route fields to the right vault and check whether a caller's role appears in `reveal_roles` before detokenizing.
 
 Why this lives on the Decision Card: tokenization vendor + field list + reveal roles are **buyer-side configuration of the approval**, not a vendor declaration. The vendor's Tool Card or Clinical AI Card declares which PII the product collects; the Decision Card records which of those fields the buyer chose to vault and who may reveal them.
+
+### v0.3: retention envelope
+
+v0.3 adds a second optional top-level field — `retention_envelope` — for declaring per-field TTLs, redaction actions, and signed-deletion-proof endpoints the buyer expects the vendor to honor. v0.1 and v0.2 documents stay valid against the v0.3 schema; consumers that only understand earlier versions can ignore the new field safely.
+
+Where `data_vault_targets` answers *who can read*, `retention_envelope` answers *how long the underlying data lives* and *how deletion is proven*.
+
+```jsonc
+{
+  "decision_card_version": "0.3",
+  // ... existing fields ...
+  "data_vault_targets": [ /* same as v0.2 */ ],
+  "retention_envelope": [
+    {
+      "field": "student.email",
+      "ttl": "P90D",
+      "redact_on_expiry": "tokenize",
+      "deletion_proof_uri": "https://acme-edu.org/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://acme-edu.org/.well-known/keys/retention-signer.json",
+      "exemptions": [
+        {
+          "trigger": "active-legal-hold",
+          "role": "legal-hold-officer",
+          "max_extension": "P365D",
+          "audit_uri": "https://acme-edu.org/audit-stream"
+        }
+      ],
+      "notes": "On expiry the value is tokenized via the vault, not purged, so vault-resident analytics keep working without ever surfacing the raw value."
+    },
+    {
+      "field": "session.transcript",
+      "ttl": "P1Y",
+      "redact_on_expiry": "hash",
+      "deletion_proof_uri": "https://acme-edu.org/.well-known/retention/proof",
+      "deletion_signer_key_uri": "https://acme-edu.org/.well-known/keys/retention-signer.json"
+    }
+  ]
+}
+```
+
+**`redact_on_expiry`** enum:
+- `purge` — remove the value entirely
+- `tokenize` — replace with a vault token but keep the row (requires a matching `data_vault_targets` entry)
+- `hash` — replace with a one-way SHA-256 so cohort analytics is possible without identifiers
+- `replace-with-null` — zero the field but keep the schema slot
+
+**`ttl`** — ISO 8601 duration (`P30D`, `P7Y`, `P12M`) computed from the value's first persistence, or an absolute RFC 3339 timestamp.
+
+**`exemptions[]`** — declarative legal-hold / regulator-request / active-investigation pauses on TTL accrual, each with an optional `max_extension` cap. Exemption invoke/release events are auditable via the declared `audit_uri` (typically the same audit-stream that consumes deletion receipts).
+
+**Deletion proofs** — when `redact_on_expiry` fires, the consumer posts an ed25519-signed receipt to `deletion_proof_uri`. Receipts follow the audit-stream event shape (canonical-JSON SHA-256) so they append cleanly to a running audit-stream-py instance for tamper-evident long-term storage. The `deletion_signer_key_uri` (convention: a JWK Set at `/.well-known/keys/retention-signer.json`) lets any auditor verify a receipt without contacting the buyer.
+
+Why this lives on the Decision Card: retention horizons, redaction actions, and signer-key URLs are **buyer-side configuration of the approval** — they map to the buyer's records-retention policy, not the vendor's product. The vendor's Tool Card declares which fields the product collects; the Decision Card records how long the buyer permits storage and how deletion is auditably proven.
 
 ## Well-known URL convention
 
@@ -103,8 +156,9 @@ Six fields are required: `decision_card_version`, `decision_id`, `issued_at`, `b
 | `hospital-clinical-rejected.json` | HealthTech | v0.1 | Rejected-with-remediation — FDA clearance scope mismatch + bias audit cohort gap |
 | `federal-agency-approved.json` | Federal civilian | v0.1 | Approved for non-rights-impacting use per OMB M-24-10 + NIST AI RMF rubric |
 | `district-edtech-vaulted-pii.json` | EdTech (K-12 district) | **v0.2** | Approved with `data_vault_targets` — Skyyflow vault for student/parent PII, principal + compliance-officer reveal roles |
+| `district-edtech-retention-envelope.json` | EdTech (K-12 district) | **v0.3** | Approved with `data_vault_targets` + `retention_envelope` — 90-day contact-PII TTL (tokenize/purge), 1-year transcript TTL (hash), ed25519-signed deletion receipts, legal-hold exemptions |
 
-All validate against `decision-card.schema.json` (CI runs this on every push). The v0.2 example is parsed by the v0.2 schema only; older `kg-validate-action` releases (v0.1.1 and earlier) will reject the new field — bump to a v0.2-aware release when one ships.
+All validate against `decision-card.schema.json` (CI runs this on every push). v0.2 and v0.3 documents are parsed by the current schema only; older `kg-validate-action` releases (v0.1.1 and earlier) will reject the newer fields — bump to a v0.3-aware release when one ships.
 
 ## Composability with the rest of the Suite
 
