@@ -1,8 +1,11 @@
 name: Validate examples
 
-# Validates every JSON document under examples/ against the Suite schemas via
-# kg-validate-action. Each example must carry decision_card_version at the top
-# level to be matched; the action then runs ajv against the bundled schema.
+# Validates every JSON document under examples/ against the local
+# decision-card.schema.json (the spec repo is its own source of truth for the
+# schema — bundled action releases will lag the schema during version bumps).
+#
+# v0.2 adds the optional `data_vault_targets` field; the cross-repo
+# kg-validate-action will catch up in v0.2.0 of that release.
 
 on:
   push:
@@ -13,10 +16,49 @@ on:
 
 jobs:
   validate-examples:
-    name: Validate against Kinetic Gain Protocol Suite schemas
+    name: Validate against local decision-card.schema.json
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: mizcausevic-dev/kg-validate-action@v0.1.1
+      - uses: actions/setup-node@v4
         with:
-          files: 'examples/**/*.json'
+          node-version: "20"
+      - name: Install ajv
+        run: npm install --no-save ajv@^8 ajv-formats@^3
+      - name: Validate every example against the local schema
+        run: |
+          node - <<'EOF'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const Ajv = require("ajv");
+          const addFormats = require("ajv-formats");
+
+          const schema = JSON.parse(fs.readFileSync("decision-card.schema.json", "utf8"));
+          const ajv = new Ajv({ allErrors: true, strict: false });
+          addFormats(ajv);
+          const validate = ajv.compile(schema);
+
+          const examples = fs
+            .readdirSync("examples")
+            .filter((f) => f.endsWith(".json"))
+            .map((f) => path.join("examples", f));
+
+          let failed = 0;
+          for (const file of examples) {
+            const doc = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (!validate(doc)) {
+              failed++;
+              console.error(`FAIL ${file}`);
+              for (const err of validate.errors) {
+                console.error(`     ${err.instancePath || "/"} ${err.message}`);
+              }
+            } else {
+              console.log(`PASS ${file} (decision_card_version=${doc.decision_card_version})`);
+            }
+          }
+          if (failed > 0) {
+            console.error(`\n${failed} example(s) failed validation.`);
+            process.exit(1);
+          }
+          console.log(`\nAll ${examples.length} example(s) valid against local schema.`);
+          EOF

@@ -1,0 +1,135 @@
+{
+  "decision_card_version": "0.2",
+  "decision_id": "SPRINGFIELD-DEC-2026-014",
+  "issued_at": "2026-05-28T17:30:00Z",
+
+  "buyer": {
+    "name": "Springfield Unified School District",
+    "type": "school-district",
+    "category": "edtech-district",
+    "jurisdiction": "US-CA",
+    "url": "https://springfield.edu/",
+    "contact": "procurement@springfield.edu",
+    "id": "https://springfield.edu/#org"
+  },
+
+  "decision_maker": {
+    "role": "Director of Educational Technology",
+    "name": "Dr. Jane Doe",
+    "department": "Office of Technology",
+    "authority": "Board Resolution 2026-04"
+  },
+
+  "decision": {
+    "status": "approved-with-conditions",
+    "effective_from": "2026-09-01",
+    "effective_until": "2027-08-31",
+    "scope": "K-12 family-communication tool; approved only when student and parent contact PII flows through the district's tokenization vault."
+  },
+
+  "subject": {
+    "vendor_name": "FamilyReach AI",
+    "product_name": "FamilyReach 2.4",
+    "vendor_id": "https://familyreach.example/.well-known/aeo.json",
+    "documents_reviewed": [
+      {
+        "type": "tool-card",
+        "url": "https://familyreach.example/.well-known/tool-cards/index.json",
+        "fetched_at": "2026-05-26T15:00:00Z",
+        "content_hash": "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+        "version": "2.4.1"
+      },
+      {
+        "type": "student-ai-disclosure",
+        "url": "https://familyreach.example/.well-known/student-ai-disclosure.json",
+        "fetched_at": "2026-05-26T15:00:00Z",
+        "content_hash": "sha256:1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd"
+      }
+    ]
+  },
+
+  "criteria": {
+    "policy_uris": [
+      "https://springfield.edu/.well-known/aup.json",
+      "https://springfield.edu/policies/student-pii-vaulting-2026.pdf"
+    ],
+    "rubric": [
+      {
+        "id": "ferpa-compliance",
+        "description": "Vendor processes student records in a FERPA-compliant manner.",
+        "weight": 1.0,
+        "result": "pass"
+      },
+      {
+        "id": "coppa-compliance",
+        "description": "Vendor obtains verifiable parental consent for users under 13.",
+        "weight": 1.0,
+        "result": "pass"
+      },
+      {
+        "id": "pii-tokenization",
+        "description": "Student/parent contact PII is tokenized before persistence in vendor systems.",
+        "weight": 1.0,
+        "result": "pass-with-condition",
+        "notes": "Approved subject to data_vault_targets[0] — vendor never sees raw email or phone."
+      }
+    ]
+  },
+
+  "conditions": [
+    {
+      "id": "C-1",
+      "description": "Student and parent contact PII (email, phone) MUST be tokenized through the district's vault before flowing to FamilyReach. Vendor receives tokens only.",
+      "enforcement": "technical",
+      "violation_response": "Approval suspended pending review; district disables the tenant.",
+      "verification_uri": "https://springfield.edu/audit/v_vault_tokens"
+    },
+    {
+      "id": "C-2",
+      "description": "Detokenization may only be performed by Springfield USD principals and compliance-officers acting on documented family-services requests. All reveal events are appended to the district audit stream.",
+      "enforcement": "technical",
+      "verification_uri": "https://springfield.edu/audit-stream"
+    }
+  ],
+
+  "rationale": "FamilyReach 2.4's product is a fit for the district's family-communication goal, but the Tool Card discloses storage of raw student/parent email and phone for 90 days. The district approves use only when contact PII never leaves the district perimeter in raw form — tokenized at ingest via the district's Skyflow vault, with reveal limited to two roles operating under documented family-services review. Vendor signs a contractual confirmation that tokens are sufficient for product functionality.",
+
+  "data_vault_targets": [
+    {
+      "vendor": "skyflow",
+      "vault_id": "v_xxxxxxxxxxxxxxxxxxxx",
+      "vault_url": "https://springfield-edu.vault.skyflowapis.com/",
+      "fields_authorized": [
+        "student.email",
+        "student.parent_email",
+        "student.parent_phone"
+      ],
+      "reveal_roles": ["principal", "compliance-officer"],
+      "reveal_audit_uri": "https://springfield.edu/audit-stream",
+      "expires_at": "2027-08-31T23:59:59Z",
+      "notes": "US-East residency. Key rotation: 90-day. Reveal requests outside the two named roles are denied at the broker layer and logged as policy violations."
+    }
+  ],
+
+  "history": [
+    {
+      "event": "review_started",
+      "at": "2026-05-12T13:00:00Z",
+      "actor": "Director of Educational Technology"
+    },
+    {
+      "event": "documents_collected",
+      "at": "2026-05-26T15:00:00Z"
+    },
+    {
+      "event": "approved-with-conditions",
+      "at": "2026-05-28T17:30:00Z",
+      "note": "Technical vaulting condition added per FERPA review."
+    }
+  ],
+
+  "publication": {
+    "publication_uri": "https://springfield.edu/.well-known/decisions/SPRINGFIELD-DEC-2026-014.json",
+    "is_public": true
+  }
+}

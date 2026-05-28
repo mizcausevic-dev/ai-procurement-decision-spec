@@ -18,10 +18,36 @@ The Decision Card fixes that. A buyer publishes a Decision Card at a well-known 
 Documents conforming to this spec carry the top-level field:
 
 ```json
-{ "decision_card_version": "0.1", ... }
+{ "decision_card_version": "0.2", ... }
 ```
 
-This matches the Suite's pattern (`aeo_version`, `clinical_ai_card_version`, etc.) for auto-detection across MCP tools, the GitHub Action, and the hosted validator.
+This matches the Suite's pattern (`aeo_version`, `clinical_ai_card_version`, etc.) for auto-detection across MCP tools, the GitHub Action, and the hosted validator. Values `"0.1"` and `"0.2"` are both valid — see the [v0.2 section](#v02-data-vault-targets) below.
+
+### v0.2: data vault targets
+
+v0.2 adds one optional top-level field — `data_vault_targets` — for declaring vendor-neutral PII tokenization vault targets the decision authorizes at runtime. The field is **additive and optional**: v0.1 documents stay valid against the v0.2 schema, and consumers that only understand v0.1 can ignore the new field safely.
+
+```jsonc
+{
+  "decision_card_version": "0.2",
+  // ... existing fields ...
+  "data_vault_targets": [
+    {
+      "vendor": "skyflow",
+      "vault_id": "v_xxxxxxxxxxxxxxxxxxxx",
+      "vault_url": "https://acme-edu.vault.skyflowapis.com/",
+      "fields_authorized": ["student.email", "student.parent_phone"],
+      "reveal_roles": ["principal", "compliance-officer"],
+      "reveal_audit_uri": "https://acme-edu.org/audit-stream",
+      "notes": "EU-resident vault per GDPR carve-out in Condition C-2."
+    }
+  ]
+}
+```
+
+**Vendor enum** (descriptive, not endorsement): `skyflow · piiano · nightfall · private-ai · very-good-security · evervault · custom · other`. The spec does not endorse a provider — the field is shape-only so downstream enforcement engines (`policy-as-code-engine`, `mcp-permission-broker`, runtime governance bridges) can route fields to the right vault and check whether a caller's role appears in `reveal_roles` before detokenizing.
+
+Why this lives on the Decision Card: tokenization vendor + field list + reveal roles are **buyer-side configuration of the approval**, not a vendor declaration. The vendor's Tool Card or Clinical AI Card declares which PII the product collects; the Decision Card records which of those fields the buyer chose to vault and who may reveal them.
 
 ## Well-known URL convention
 
@@ -71,13 +97,14 @@ Six fields are required: `decision_card_version`, `decision_id`, `issued_at`, `b
 
 ## Example fixtures (`examples/`)
 
-| File | Vertical | Outcome |
-|---|---|---|
-| `district-edtech-approved-conditions.json` | EdTech (K-12 district) | Approved-with-conditions — 3 contractual/audit/technical conditions on an AI tutor |
-| `hospital-clinical-rejected.json` | HealthTech | Rejected-with-remediation — FDA clearance scope mismatch + bias audit cohort gap |
-| `federal-agency-approved.json` | Federal civilian | Approved for non-rights-impacting use per OMB M-24-10 + NIST AI RMF rubric |
+| File | Vertical | Version | Outcome |
+|---|---|---|---|
+| `district-edtech-approved-conditions.json` | EdTech (K-12 district) | v0.1 | Approved-with-conditions — 3 contractual/audit/technical conditions on an AI tutor |
+| `hospital-clinical-rejected.json` | HealthTech | v0.1 | Rejected-with-remediation — FDA clearance scope mismatch + bias audit cohort gap |
+| `federal-agency-approved.json` | Federal civilian | v0.1 | Approved for non-rights-impacting use per OMB M-24-10 + NIST AI RMF rubric |
+| `district-edtech-vaulted-pii.json` | EdTech (K-12 district) | **v0.2** | Approved with `data_vault_targets` — Skyflow vault for student/parent PII, principal + compliance-officer reveal roles |
 
-All three validate against `decision-card.schema.json` (CI runs this on every push).
+All validate against `decision-card.schema.json` (CI runs this on every push). The v0.2 example is parsed by the v0.2 schema only; older `kg-validate-action` releases (v0.1.1 and earlier) will reject the new field — bump to a v0.2-aware release when one ships.
 
 ## Composability with the rest of the Suite
 

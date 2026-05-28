@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/mizcausevic-dev/ai-procurement-decision-spec/blob/main/decision-card.schema.json",
   "title": "AI Procurement Decision Card",
-  "description": "A buyer-side artifact recording the outcome of a procurement review of one or more AI vendor declaration documents. Served at /.well-known/decisions/{decision_id}.json (per-decision) or referenced in /.well-known/decisions/index.json. v0.1 draft.",
+  "description": "A buyer-side artifact recording the outcome of a procurement review of one or more AI vendor declaration documents. Served at /.well-known/decisions/{decision_id}.json (per-decision) or referenced in /.well-known/decisions/index.json. v0.2 draft (v0.1 documents remain valid).",
   "type": "object",
   "required": [
     "decision_card_version",
@@ -16,9 +16,9 @@
   "additionalProperties": false,
   "properties": {
     "decision_card_version": {
-      "description": "Spec version. MUST be '0.1' for documents conforming to this draft.",
+      "description": "Spec version. '0.1' or '0.2'. v0.2 adds the optional 'data_vault_targets' field for declaring vendor-neutral PII tokenization vault targets the decision authorizes at runtime; v0.1 documents remain valid.",
       "type": "string",
-      "const": "0.1"
+      "enum": ["0.1", "0.2"]
     },
     "decision_id": {
       "description": "Stable, buyer-issued identifier. Conventionally DEC-<year>-<seq> but any string unique to the buyer is valid.",
@@ -57,7 +57,12 @@
       "type": "array",
       "items": { "$ref": "#/$defs/Signature" }
     },
-    "withdrawal": { "$ref": "#/$defs/Withdrawal" }
+    "withdrawal": { "$ref": "#/$defs/Withdrawal" },
+    "data_vault_targets": {
+      "description": "v0.2. Optional. Vendor-neutral declaration of PII tokenization vault targets this decision authorizes at runtime — used by the policy-as-code engine and downstream enforcement points (MCP permission broker, governance bridges, RAG indexers) to route specific PII fields through a vault before persistence and to permit detokenization only for declared reveal_roles. Vendor-neutral by design: the 'vendor' enum names known providers but the field is shape-only; pricing, contracts, and provider selection live outside this spec.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/DataVaultTarget" }
+    }
   },
   "$defs": {
     "Buyer": {
@@ -335,6 +340,53 @@
         "reason": { "type": "string", "minLength": 1 },
         "replaces": {
           "description": "If this withdrawn decision is being replaced by a new one, the new decision_id.",
+          "type": "string"
+        }
+      }
+    },
+    "DataVaultTarget": {
+      "description": "v0.2. One PII tokenization vault target this decision authorizes. The decision_card_version='0.2' document declares ONLY the contract (vendor, vault id/uri, fields, reveal_roles). The actual vault, its credentials, its key material, and its commercial relationship sit outside this spec — buyer and vendor implementations choose those at deployment time.",
+      "type": "object",
+      "required": ["vendor", "fields_authorized"],
+      "additionalProperties": false,
+      "properties": {
+        "vendor": {
+          "description": "Vault provider. Vendor-neutral enum; 'custom' covers self-hosted vaults and 'other' covers providers not yet listed. Adding a name here is descriptive only; the spec does not endorse any provider.",
+          "type": "string",
+          "enum": ["skyflow", "piiano", "nightfall", "private-ai", "very-good-security", "evervault", "custom", "other"]
+        },
+        "vault_id": {
+          "description": "Provider-issued vault identifier. Format is vendor-specific.",
+          "type": "string"
+        },
+        "vault_url": {
+          "description": "Public reference URL for the vault — e.g. tenant URL, provider console URL, or runbook URL where reviewers can audit the vault configuration.",
+          "type": "string",
+          "format": "uri"
+        },
+        "fields_authorized": {
+          "description": "Names of the PII fields this decision authorizes for tokenization through this vault. Simple field names ('email', 'phone', 'ssn') or JSONPath-style selectors ('$.contact.email'). The buyer is responsible for keeping this list aligned with the vendor's declared collected_pii fields.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "reveal_roles": {
+          "description": "Roles that may detokenize (reveal) the vaulted PII when this decision is in force. Role names are buyer-defined — e.g. 'fraud-investigator', 'support-l2', 'auditor'. Empty array means no role may reveal; the field stays tokenized end-to-end.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "reveal_audit_uri": {
+          "description": "URL where reveal events should be appended for tamper-evident audit (e.g. an evidence-bundle endpoint or an audit-stream service).",
+          "type": "string",
+          "format": "uri"
+        },
+        "expires_at": {
+          "description": "Optional override. If absent, the vault authorization expires with the decision (decision.effective_until).",
+          "type": "string",
+          "format": "date-time"
+        },
+        "notes": {
+          "description": "Free-form notes — e.g. residency requirements, key-rotation expectations, contractual carve-outs.",
           "type": "string"
         }
       }
